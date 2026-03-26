@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HanFei 韩非 — GPU-Accelerated MSM for the Pallas Curve</title>
+<title>hanfei-shu 术 — GPU MSM for Pallas</title>
 <style>
   :root {
     --bg: #0d1117; --surface: #161b22; --border: #30363d;
@@ -11,277 +11,121 @@
     --green: #3fb950; --orange: #d29922; --red: #f85149;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: var(--bg); color: var(--text);
-    line-height: 1.6; max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6; max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
   h1 { font-size: 2.2rem; margin-bottom: 0.3rem; }
-  h2 { font-size: 1.4rem; margin-top: 2.5rem; margin-bottom: 1rem;
-       border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
-  h3 { font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
   p, li { margin-bottom: 0.6rem; }
-  .subtitle { color: var(--muted); font-size: 1.1rem; margin-bottom: 1.5rem; }
-  .badge { display: inline-block; padding: 0.2rem 0.7rem; border-radius: 1rem;
-           font-size: 0.8rem; font-weight: 600; margin-right: 0.4rem; margin-bottom: 0.5rem; }
-  .badge-green { background: #1a3a2a; color: var(--green); border: 1px solid #2a5a3a; }
-  .badge-blue { background: #1a2a3a; color: var(--accent); border: 1px solid #2a4a6a; }
-  .badge-orange { background: #2a2a1a; color: var(--orange); border: 1px solid #4a4a2a; }
+  .subtitle { color: var(--muted); font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .quote { color: var(--muted); font-style: italic; margin-bottom: 1.5rem; }
   code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.9em;
-         background: var(--surface); padding: 0.15rem 0.4rem; border-radius: 4px; }
+    background: var(--surface); padding: 0.15rem 0.4rem; border-radius: 4px; }
   pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-        padding: 1rem; overflow-x: auto; margin: 1rem 0; }
-  pre code { background: none; padding: 0; }
+    padding: 1rem; overflow-x: auto; margin: 1rem 0; } pre code { background: none; padding: 0; }
   table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
   th, td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
   td { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.9rem; }
   .speedup { color: var(--green); font-weight: 600; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-          padding: 1.5rem; margin: 1rem 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin: 1rem 0; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
   @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
-  .formula { text-align: center; font-size: 1.15rem; padding: 1.2rem;
-             background: var(--surface); border-radius: 8px; margin: 1rem 0;
-             font-family: 'Georgia', serif; font-style: italic; }
-  .origin-box { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                border: 1px solid #2a3a5a; border-radius: 8px; padding: 1.5rem; margin: 1.5rem 0; }
-  .origin-box h3 { margin-top: 0; color: var(--accent); }
-  .pipeline { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-              padding: 1.2rem 1.5rem; margin: 1rem 0; font-family: 'SFMono-Regular', Consolas, monospace;
-              font-size: 0.85rem; line-height: 1.8; }
-  .pipeline .highlight { color: var(--green); font-weight: 700; }
-  .roadmap-item { display: flex; align-items: flex-start; gap: 0.8rem; margin-bottom: 1rem; }
-  .roadmap-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
-  .dot-done { background: var(--green); }
-  .dot-next { background: var(--orange); }
-  .dot-future { background: var(--border); }
-  .progress-compare td:nth-child(2) { color: var(--red); }
-  .progress-compare td:nth-child(3) { color: var(--green); font-weight: 600; }
-  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
-           color: var(--muted); font-size: 0.85rem; }
-  ul { padding-left: 1.5rem; }
+  .no { color: var(--red); } .yes { color: var(--green); font-weight: 700; }
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  img { max-width: 100%; border-radius: 8px; }
 </style>
 </head>
 <body>
 
-<h1>HanFei 韩非</h1>
-<p class="subtitle">The first — and currently only — GPU-accelerated MSM for the Pallas elliptic curve.</p>
-<p style="color:var(--muted);font-style:italic;margin-bottom:1.5rem">"法不阿贵，绳不挠曲" — The law does not favor the noble; the plumb line does not bend for the crooked.</p>
+<h1>hanfei-shu 术</h1>
+<p class="subtitle">Making zero-knowledge proofs run on GPUs.</p>
+<p class="quote">"法不阿贵，绳不挠曲" — The plumb line does not bend for the crooked. — 韩非子</p>
 
-<span class="badge badge-green">Pallas Curve</span>
-<span class="badge badge-blue">CUDA GPU</span>
-<span class="badge badge-orange">Halo2 Compatible</span>
-<span class="badge badge-green">Bit-Exact</span>
-<span class="badge badge-blue">Apache 2.0</span>
-<span class="badge badge-orange">No Competitors</span>
+<img src="star_flow.png" alt="hanfei-shu data flow: Your Code → Smart Dispatch → GPU Kernel (locked) → Verified Result">
 
-<div style="margin:1.5rem 0">
-  <img src="benchmark.svg" alt="GPU vs CPU benchmark chart" style="width:100%;border-radius:12px">
-</div>
+<h2>What does this do?</h2>
 
-<!-- ======================== WHAT ======================== -->
-<h2>What Problem Does This Solve?</h2>
+<p>If you're building on <a href="https://zcash.github.io/halo2/">Halo2</a> zero-knowledge proofs — for AI verification, blockchain privacy, or anything with the Pallas curve — there's one operation eating most of your proving time: <strong>multi-scalar multiplication (MSM)</strong>.</p>
 
-<p><strong>Multi-Scalar Multiplication (MSM)</strong> is the single most expensive operation in zero-knowledge proof systems. Given <em>n</em> scalar-point pairs, it computes:</p>
+<p>MSM is a giant dot product on elliptic curve points. It takes 60-70% of proof generation time. On CPU, half a million points takes ~300ms. That adds up.</p>
 
-<div class="formula">R = s<sub>1</sub>&middot;G<sub>1</sub> + s<sub>2</sub>&middot;G<sub>2</sub> + &hellip; + s<sub>n</sub>&middot;G<sub>n</sub></div>
+<p><strong>hanfei-shu</strong> moves this to your NVIDIA GPU. Same math, same results, just faster.</p>
 
-<p>In Halo2's IPA proving scheme, MSM accounts for <strong>60-70% of total proving time</strong>. For a transformer attention layer at d=256, this means MSM alone takes over 100 seconds on CPU.</p>
+<h2>How much faster?</h2>
 
-<p>GPU acceleration is the standard approach for BN254 and BLS12-381 curves (via <a href="https://github.com/ingonyama-zk/icicle">ICICLE</a>, <a href="https://github.com/speakspeak/cuZK">cuZK</a>), but <strong>no GPU library existed for the Pallas curve</strong> &mdash; until now.</p>
-
-<p><strong>Pallas</strong> is one half of the <a href="https://electriccoin.co/blog/the-pasta-curves-for-halo-2-and-beyond/">Pasta curve cycle</a> used by <a href="https://zcash.github.io/halo2/">Halo2</a>, <a href="https://z.cash/">Zcash</a>, and other recursive proof systems.</p>
-
-<!-- ======================== ORIGIN ======================== -->
-<div class="origin-box">
-  <h3>Part of ChainProve / nanoZkinference</h3>
-  <p>This crate is the GPU acceleration component of <a href="https://github.com/GeoffreyWang1117/nanoZkinference">ChainProve (nanoZkinference)</a>, a system for <strong>verifiable transformer inference</strong> using zero-knowledge proofs. It accelerates the Halo2 IPA proving step that generates cryptographic proofs of correct neural network execution.</p>
-  <p style="margin-bottom:0.3rem"><strong>Paper:</strong> Zhaohui Wang. <em>Verifiable Transformer Inference on NanoGPT: A Layerwise zkML Prototype.</em> arXiv, 2025.</p>
-  <p style="margin-bottom:0"><strong>Venues:</strong> VerifAI @ ICLR 2026 (accepted), BlockSys 2026 (submitted), ICICS 2026 (in prep).</p>
-</div>
-
-<h3>Where it fits in the pipeline</h3>
-<div class="pipeline">
-  Python API (nanozk_halo2)<br>
-  &nbsp;&nbsp;&darr;<br>
-  Halo2 Backend (Rust / PyO3)<br>
-  &nbsp;&nbsp;&darr;<br>
-  Forked halo2_proofs (MSM patched)<br>
-  &nbsp;&nbsp;&darr;<br>
-  <span class="highlight">HanFei &larr; this crate</span><br>
-  &nbsp;&nbsp;&darr;<br>
-  CUDA Kernels (prebuilt, sm_86 / sm_89 / sm_90)
-</div>
-
-<!-- ======================== LANDSCAPE ======================== -->
-<h2>No Existing Alternatives</h2>
-
-<p>As of March 2026, <strong>no other library provides GPU-accelerated MSM for the Pallas curve</strong>:</p>
+<p>RTX 3090 vs CPU Pippenger (single-threaded):</p>
 
 <table>
-  <thead><tr><th>Library</th><th>BN254</th><th>BLS12-381</th><th>Pallas</th></tr></thead>
-  <tbody>
-    <tr><td><a href="https://github.com/ingonyama-zk/icicle">ICICLE</a> (Ingonyama)</td><td>Yes</td><td>Yes</td><td style="color:var(--red)">No</td></tr>
-    <tr><td><a href="https://github.com/speakspeak/cuZK">cuZK</a></td><td>Yes</td><td>No</td><td style="color:var(--red)">No</td></tr>
-    <tr><td><a href="https://github.com/spaceandtimelabs/blitzar">Blitzar</a></td><td>Yes</td><td>Yes</td><td style="color:var(--red)">No</td></tr>
-    <tr><td><a href="https://github.com/filecoin-project/ec-gpu">ec-gpu</a></td><td>Yes</td><td>Yes</td><td style="color:var(--red)">No</td></tr>
-    <tr><td><a href="https://github.com/privacy-scaling-explorations/halo2curves">halo2curves</a></td><td>&mdash;</td><td>&mdash;</td><td>CPU only</td></tr>
-    <tr><td><strong>HanFei</strong></td><td>&mdash;</td><td>&mdash;</td><td style="color:var(--green);font-weight:700">Yes</td></tr>
-  </tbody>
+<thead><tr><th>Points</th><th>CPU</th><th>GPU</th><th>Speedup</th></tr></thead>
+<tbody>
+<tr><td>64K</td><td>538ms</td><td>115ms</td><td class="speedup">4.7x</td></tr>
+<tr><td>128K</td><td>1008ms</td><td>205ms</td><td class="speedup">4.9x</td></tr>
+<tr><td>256K</td><td>1806ms</td><td>398ms</td><td class="speedup">4.5x</td></tr>
+</tbody>
 </table>
 
-<p>The entire Halo2 / Zcash / Pasta ecosystem currently has <strong>zero GPU MSM options</strong>. This crate is the only one.</p>
+<p>Every result is <strong>bit-exact</strong> — the GPU produces the same answer as the CPU.</p>
 
-<!-- ======================== PERFORMANCE ======================== -->
-<h2>Performance</h2>
-
-<p>Benchmarked on <strong>RTX 3090</strong> (Ampere, 82 SMs) vs <strong>Ryzen 9 5950X</strong> (32 threads):</p>
+<h2>No alternatives exist</h2>
 
 <table>
-  <thead>
-    <tr><th>Input Size</th><th>GPU (ms)</th><th>CPU (ms)</th><th>Speedup</th><th>Correct</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>64K (k=16)</td><td>35.9</td><td>47.6</td><td class="speedup">1.33x</td><td>OK</td></tr>
-    <tr><td>128K (k=17)</td><td>58.7</td><td>85.1</td><td class="speedup">1.45x</td><td>OK</td></tr>
-    <tr><td>256K (k=18)</td><td>110.7</td><td>154.6</td><td class="speedup">1.40x</td><td>OK</td></tr>
-    <tr><td>512K (k=19)</td><td>175.2</td><td>298.5</td><td class="speedup">1.70x</td><td>OK</td></tr>
-    <tr><td>1M (k=20)</td><td>351.7</td><td>527.7</td><td class="speedup">1.50x</td><td>OK</td></tr>
-    <tr><td>2M (k=21)</td><td>740.1</td><td>975.5</td><td class="speedup">1.32x</td><td>OK</td></tr>
-  </tbody>
+<thead><tr><th>Library</th><th>BN254</th><th>BLS12-381</th><th>Pallas</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/ingonyama-zk/icicle">ICICLE</a></td><td>Yes</td><td>Yes</td><td class="no">No</td></tr>
+<tr><td><a href="https://github.com/speakspeak/cuZK">cuZK</a></td><td>Yes</td><td>No</td><td class="no">No</td></tr>
+<tr><td><a href="https://github.com/spaceandtimelabs/blitzar">Blitzar</a></td><td>Yes</td><td>Yes</td><td class="no">No</td></tr>
+<tr><td><strong>hanfei-shu</strong></td><td>—</td><td>—</td><td class="yes">Yes</td></tr>
+</tbody>
 </table>
 
-<h3>Progress from early prototype to v0.1.0</h3>
-<table class="progress-compare">
-  <thead><tr><th>k</th><th>Early prototype</th><th>v0.1.0</th><th>Improvement</th></tr></thead>
-  <tbody>
-    <tr><td>17 (128K)</td><td>0.61x (GPU slower)</td><td>1.45x (GPU wins)</td><td>2.4x</td></tr>
-    <tr><td>19 (512K)</td><td>0.84x</td><td>1.70x</td><td>2.0x</td></tr>
-    <tr><td>21 (2M)</td><td>0.77x</td><td>1.32x</td><td>1.7x</td></tr>
-  </tbody>
-</table>
+<h2>Quick start</h2>
 
-<!-- ======================== FEATURES ======================== -->
-<h2>Features</h2>
+<pre><code># Cargo.toml
+[dependencies]
+hanfei-shu = { git = "https://github.com/GeoffreyWang1117/hanfei-shu" }</code></pre>
+
+<pre><code>use hanfei_shu::{gpu_best_multiexp, is_gpu_available};
+use hanfei_shu::cpu::pippenger_msm; // CPU reference
+
+let gpu = gpu_best_multiexp(&amp;scalars, &amp;bases);
+let cpu = pippenger_msm(&amp;scalars, &amp;bases);
+assert_eq!(gpu, cpu); // bit-exact</code></pre>
+
+<h2>"But where's the GPU code?"</h2>
+
+<div class="card">
+<p>The CUDA kernels are <strong>prebuilt compiled libraries</strong>, not source code. Same model as NVIDIA's cuBLAS or Intel's MKL.</p>
+<p>Why: <strong>You don't need CUDA Toolkit installed.</strong> <code>cargo add hanfei-shu</code> and it works.</p>
+<p>The Rust code is fully open — including a complete CPU Pippenger implementation so you can <strong>verify every GPU result yourself</strong>.</p>
+</div>
+
+<h2>What's included</h2>
 
 <div class="grid">
-  <div class="card">
-    <h3>Drop-in Replacement</h3>
-    <p>Same types and signature as <code>halo2curves::msm::best_multiexp</code>. Swap one function call.</p>
-  </div>
-  <div class="card">
-    <h3>Automatic Fallback</h3>
-    <p>No GPU? Small input? Falls back to CPU automatically. Your code works everywhere.</p>
-  </div>
-  <div class="card">
-    <h3>No Build Dependencies</h3>
-    <p>CUDA kernels are prebuilt for Ampere, Ada, and Hopper. No nvcc needed.</p>
-  </div>
-  <div class="card">
-    <h3>Bit-Exact Correctness</h3>
-    <p>GPU matches CPU results exactly. Verified across all sizes from 1K to 2M points.</p>
-  </div>
+<div class="card"><strong>GPU MSM</strong><br>CUDA kernels for A100, RTX 3090, RTX 4090. Auto-detects your GPU.</div>
+<div class="card"><strong>CPU Pippenger</strong><br>Pure Rust reference implementation. Works without GPU.</div>
+<div class="card"><strong>Smart dispatch</strong><br>Automatically uses GPU for large inputs, CPU for small ones.</div>
+<div class="card"><strong>5 examples</strong><br>AI inference demo, CPU vs GPU comparison, full benchmarks.</div>
 </div>
 
-<!-- ======================== USAGE ======================== -->
-<h2>Quick Start</h2>
-
-<pre><code>[dependencies]
-pallas-gpu-msm = { git = "https://github.com/GeoffreyWang1117/HanFei" }</code></pre>
-
-<pre><code>use pallas_gpu_msm::{gpu_best_multiexp, is_gpu_available};
-
-// Auto-dispatches: GPU for large inputs, CPU for small
-let result = gpu_best_multiexp(&amp;scalars, &amp;bases);</code></pre>
-
-<pre><code># Run the benchmark
-cargo run --release --example full_benchmark
-
-# Run tests
-cargo test --release</code></pre>
-
-<!-- ======================== ROADMAP ======================== -->
-<h2>Development Roadmap</h2>
-
-<div class="roadmap-item">
-  <div class="roadmap-dot dot-done"></div>
-  <div><strong>v0.1.0 (current)</strong> &mdash; First Pallas GPU MSM. GPU > CPU at k&ge;15. Bit-exact. Prebuilt kernels for 3 architectures. Open-source release.</div>
-</div>
-<div class="roadmap-item">
-  <div class="roadmap-dot dot-next"></div>
-  <div><strong>v0.2.0 (2026 Q2)</strong> &mdash; Kernel-level improvements for 5-10x speedup. Better GPU occupancy and memory access patterns.</div>
-</div>
-<div class="roadmap-item">
-  <div class="roadmap-dot dot-future"></div>
-  <div><strong>v0.3.0 (2026 Q3)</strong> &mdash; Python bindings, multi-GPU, Vesta curve support. Production-ready for the Halo2 ecosystem.</div>
-</div>
-<div class="roadmap-item">
-  <div class="roadmap-dot dot-future"></div>
-  <div><strong>Long-term</strong> &mdash; Top-venue publication (TCHES / ASPLOS). Default GPU backend for Halo2/Pasta ecosystem.</div>
-</div>
-
-<h3>Project Timeline</h3>
-<table>
-  <thead><tr><th>When</th><th>Milestone</th></tr></thead>
-  <tbody>
-    <tr><td>2025</td><td>Paper: "Verifiable Transformer Inference on NanoGPT" (arXiv)</td></tr>
-    <tr><td>2026 Q1</td><td>v0.1.0 release. VerifAI @ ICLR 2026 (accepted). BlockSys 2026 (submitted).</td></tr>
-    <tr><td>2026 Q2</td><td>v0.2.0: 5-10x kernel improvements. ICICS 2026 submission.</td></tr>
-    <tr><td>2026 Q3</td><td>v0.3.0: Python bindings, multi-GPU. GPU MSM paper draft.</td></tr>
-    <tr><td>2026 Q4</td><td>Production release. IEEE S&amp;P / CCS submission with full GPU results.</td></tr>
-    <tr><td>2027</td><td>TCHES / ASPLOS submission for standalone GPU MSM paper.</td></tr>
-  </tbody>
-</table>
-
-<!-- ======================== GPU TABLE ======================== -->
-<h2>Supported GPUs</h2>
+<h2>Part of HanFei 韩非</h2>
 
 <table>
-  <thead><tr><th>Architecture</th><th>GPUs</th><th>Prebuilt</th></tr></thead>
-  <tbody>
-    <tr><td>sm_75 (Turing)</td><td>T4, RTX 2080 Ti</td><td>Yes</td></tr>
-    <tr><td>sm_80 (Ampere)</td><td>A100, A30</td><td>Yes</td></tr>
-    <tr><td>sm_86 (Ampere)</td><td>RTX 3090, A6000</td><td>Yes</td></tr>
-    <tr><td>sm_89 (Ada)</td><td>RTX 4090, L40</td><td>Yes</td></tr>
-    <tr><td>sm_90 (Hopper)</td><td>H100, H200</td><td>Yes</td></tr>
-  </tbody>
+<thead><tr><th>Crate</th><th>Concept</th><th>What</th></tr></thead>
+<tbody>
+<tr><td><strong>hanfei-shu</strong> 术</td><td>Technique</td><td>GPU MSM engine (this crate)</td></tr>
+<tr><td>hanfei-shi 势</td><td>Power</td><td>Full GPU proving pipeline (planned)</td></tr>
+<tr><td>hanfei-fa 法</td><td>Law</td><td>ZK proof framework (planned)</td></tr>
+</tbody>
 </table>
 
-<!-- ======================== API ======================== -->
-<h2>API</h2>
+<p>Extracted from <a href="https://github.com/GeoffreyWang1117/nanoZkinference">ChainProve</a>, a system for verifiable transformer inference with zero-knowledge proofs.</p>
 
-<pre><code>/// Check if a CUDA GPU is available (cached after first call).
-pub fn is_gpu_available() -> bool;
-
-/// MSM: result = sum(coeffs[i] * bases[i]).
-/// GPU for &ge; 8K points, CPU fallback otherwise.
-pub fn gpu_best_multiexp(coeffs: &amp;[Scalar], bases: &amp;[Affine]) -> Point;</code></pre>
-
-<!-- ======================== CITATION ======================== -->
-<h2>Citation</h2>
-
-<pre><code>@article{nanogpt-zkinference,
-  title={Verifiable Transformer Inference on NanoGPT: A Layerwise zkML Prototype},
-  author={Zhaohui Wang},
-  journal={arXiv preprint},
-  year={2025}
-}
-
-@software{pallas_gpu_msm,
-  title={HanFei: GPU-Accelerated MSM for the Pallas Curve},
-  author={Zhaohui Wang},
-  year={2026},
-  url={https://github.com/GeoffreyWang1117/HanFei}
-}</code></pre>
-
-<!-- ======================== FOOTER ======================== -->
 <footer>
-  <p><strong>Contributors:</strong> Zhaohui (Geoffrey) Wang (design, development, paper) &middot; Claude Opus, Anthropic (research, experiments, tuning)</p>
-  <p><strong>License:</strong> <a href="https://github.com/GeoffreyWang1117/HanFei/blob/main/LICENSE">Apache 2.0</a> &middot; CUDA kernels distributed as prebuilt binaries only.</p>
-  <p><strong>Contact:</strong> <a href="mailto:zhaohui.geoffrey.wang@gmail.com">zhaohui.geoffrey.wang@gmail.com</a> &middot; <a href="https://github.com/GeoffreyWang1117/HanFei">GitHub</a> &middot; Part of <a href="https://github.com/GeoffreyWang1117/nanoZkinference">ChainProve / nanoZkinference</a></p>
+<p><strong>Contributors:</strong> Zhaohui (Geoffrey) Wang &middot; Claude Opus (Anthropic)</p>
+<p><strong>License:</strong> <a href="https://github.com/GeoffreyWang1117/hanfei-shu/blob/main/LICENSE">Apache 2.0</a> &middot; CUDA kernels as prebuilt binaries.</p>
+<p><strong>Contact:</strong> <a href="mailto:zhaohui.geoffrey.wang@gmail.com">zhaohui.geoffrey.wang@gmail.com</a> &middot; <a href="https://github.com/GeoffreyWang1117/hanfei-shu">GitHub</a></p>
 </footer>
 
 </body>
