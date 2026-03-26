@@ -55,3 +55,9 @@ name = "full_benchmark"
 
 [[example]]
 name = "official_benchmark"
+
+[[example]]
+name = "verify_inference"
+
+[[example]]
+name = "cpu_vs_gpu"

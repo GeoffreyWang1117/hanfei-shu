@@ -1,9 +1,26 @@
-//! GPU-accelerated MSM for the Pallas elliptic curve.
+#![allow(unused_imports)]
+//! # hanfei-shu 术
 //!
-//! Public API uses `pasta_curves` types for compatibility with
-//! the halo2_proofs fork. Internally calls CUDA kernels via C FFI.
+//! GPU-accelerated Multi-Scalar Multiplication (MSM) for the Pallas elliptic curve.
+//!
+//! The first — and currently only — GPU MSM for the Halo2/Pasta ecosystem.
+//!
+//! ## Quick Start
+//!
+//! ```rust,ignore
+//! use hanfei_shu::{gpu_best_multiexp, is_gpu_available};
+//! use hanfei_shu::cpu::pippenger_msm; // CPU reference for comparison
+//!
+//! let gpu_result = gpu_best_multiexp(&scalars, &bases);
+//! let cpu_result = pippenger_msm(&scalars, &bases); // verify
+//! assert_eq!(gpu_result, cpu_result);
+//! ```
 
-use group::Group;
+pub mod cpu;
+
+#[allow(unused_imports)]
+use group::{Curve, Group};
+#[allow(unused_imports)]
 use pasta_curves::arithmetic::CurveAffine;
 use pasta_curves::pallas;
 use rayon::prelude::*;
