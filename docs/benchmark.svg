@@ -66,7 +66,7 @@
 
   <!-- Legend -->
   <rect x="230" y="388" width="14" height="8" rx="2" fill="#8b949e"/>
-  <text x="250" y="396" fill="#8b949e" font-size="10">CPU Pippenger (single-threaded)</text>
+  <text x="250" y="396" fill="#8b949e" font-size="10">CPU Pippenger (Ryzen 9 5950X, 1 thread)</text>
   <rect x="440" y="388" width="14" height="8" rx="2" fill="#58a6ff"/>
   <text x="460" y="396" fill="#58a6ff" font-size="10">GPU (hanfei-shu v0.2.0, RTX 3090)</text>
 </svg>
