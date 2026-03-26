@@ -1,12 +1,13 @@
+use group::Curve;
 //! Official benchmark for comparison with nanoZkinference/ChainProve results.
 //!
 //! Outputs JSON compatible with experiments/results/proof/gpu_msm_final.json
 //! Run with: cargo run --release --example official_benchmark
 
 use ff::Field;
-use group::{Curve, Group};
-use halo2curves::pasta::pallas;
-use pallas_gpu_msm::{gpu_best_multiexp, is_gpu_available};
+use group::{Group};
+use pasta_curves::pallas;
+use hanfei_shu::{gpu_best_multiexp, is_gpu_available};
 use rand_core::OsRng;
 use std::time::Instant;
 
@@ -51,7 +52,7 @@ fn main() {
         let mut cpu_result = pallas::Point::identity();
         for _ in 0..runs {
             let t = Instant::now();
-            cpu_result = halo2curves::msm::best_multiexp(&scalars, &bases);
+            cpu_result = hanfei_shu::cpu_best_multiexp(&scalars, &bases);
             cpu_times.push(t.elapsed().as_secs_f64() * 1000.0);
         }
         let cpu_avg = cpu_times.iter().sum::<f64>() / runs as f64;
@@ -92,7 +93,7 @@ fn main() {
     // Output JSON to stdout
     let output = serde_json::json!({
         "timestamp": chrono::Local::now().to_rfc3339(),
-        "experiment": "pallas_gpu_msm_v0.1.0_official",
+        "experiment": "hanfei_shu_v0.1.0_official",
         "description": "Official benchmark: pallas-gpu-msm v0.1.0 standalone crate. Best-of-N runs. Rust-native, no Python FFI overhead.",
         "hardware": {
             "cpu": "AMD Ryzen 9 5950X 16-Core (32 threads)",

@@ -1,9 +1,10 @@
+use group::Curve;
 //! Basic example: compute an MSM on the Pallas curve using GPU acceleration.
 
 use ff::Field;
-use group::{Curve, Group};
-use halo2curves::pasta::pallas;
-use pallas_gpu_msm::{gpu_best_multiexp, is_gpu_available};
+use group::{Group};
+use pasta_curves::pallas;
+use hanfei_shu::{gpu_best_multiexp, is_gpu_available};
 use rand_core::OsRng;
 use std::time::Instant;
 
@@ -30,7 +31,7 @@ fn main() {
 
         // CPU baseline
         let t1 = Instant::now();
-        let cpu_result = halo2curves::msm::best_multiexp(&scalars, &bases);
+        let cpu_result = hanfei_shu::cpu_best_multiexp(&scalars, &bases);
         let cpu_ms = t1.elapsed().as_secs_f64() * 1000.0;
 
         let matches = result.to_affine() == cpu_result.to_affine();

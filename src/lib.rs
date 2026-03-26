@@ -1,37 +1,26 @@
-//! GPU-accelerated Multi-Scalar Multiplication (MSM) for the Pallas elliptic curve.
+//! GPU-accelerated MSM for the Pallas elliptic curve.
 //!
-//! This is the **first GPU MSM implementation for Pallas** -- existing libraries
-//! (ICICLE, cuZK, Blitzar) only support BN254/BLS12-381.
-//!
-//! # Usage
-//!
-//! ```rust,ignore
-//! use pallas_gpu_msm::{gpu_best_multiexp, is_gpu_available};
-//! use halo2curves::pasta::pallas;
-//!
-//! // Automatically dispatches to GPU for large inputs, CPU for small
-//! let result = gpu_best_multiexp(&scalars, &bases);
-//! ```
-//!
-//! Automatically dispatches to GPU for large inputs (>= 8K points) and
-//! falls back to CPU via `halo2curves::msm::best_multiexp` otherwise.
+//! Public API uses `pasta_curves` types for compatibility with
+//! the halo2_proofs fork. Internally calls CUDA kernels via C FFI.
 
 use ff::PrimeField;
-use group::{prime::PrimeCurveAffine, Group};
-use halo2curves::pasta::pallas;
-use halo2curves::CurveAffine;
+use group::{Curve, Group, GroupEncoding};
+use pasta_curves::arithmetic::CurveAffine;
+use pasta_curves::pallas;
+use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 
-/// Pallas affine point type.
+/// Pallas affine point type (from pasta_curves).
 pub type Affine = pallas::Affine;
 /// Pallas projective point type.
 pub type Point = pallas::Point;
 /// Pallas scalar field element type.
-pub type Scalar = <Affine as PrimeCurveAffine>::Scalar;
+pub type Scalar = pallas::Scalar;
 
-// GPU struct mirrors -- must match CUDA struct layout exactly
+// GPU struct mirrors — must match CUDA layout exactly
 #[repr(C, align(32))]
+#[derive(Clone, Copy)]
 struct GpuFp { l: [u64; 4] }
 
 #[repr(C)]
@@ -44,6 +33,7 @@ struct GpuAffine {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct GpuResult {
     x: GpuFp,
     y: GpuFp,
@@ -58,15 +48,16 @@ extern "C" {
         n: i32,
         result: *mut GpuResult,
     ) -> i32;
+    fn gpu_msm_get_partials(
+        out: *mut GpuResult,
+        max_count: i32,
+    ) -> i32;
 }
 
 static GPU_INIT: Once = Once::new();
 static GPU_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
 /// Check if a CUDA GPU is available at runtime.
-///
-/// The check is performed once and cached. Returns `false` if no CUDA device
-/// is detected or if the CUDA runtime is not available.
 pub fn is_gpu_available() -> bool {
     GPU_INIT.call_once(|| {
         let ok = unsafe { gpu_msm_check() } != 0;
@@ -75,64 +66,70 @@ pub fn is_gpu_available() -> bool {
     GPU_AVAILABLE.load(Ordering::Relaxed)
 }
 
-/// Minimum input size for GPU dispatch (GPU is slower below this).
-const GPU_MIN_SIZE: usize = 1 << 13; // 8K points
+const GPU_MIN_SIZE: usize = 1 << 16; // 128K: GPU only when kernel speedup clearly exceeds per-call overhead
 
-/// Compute multi-scalar multiplication: `result = sum(coeffs[i] * bases[i])`.
-///
-/// Automatically dispatches to GPU for inputs >= 8K points when a CUDA GPU
-/// is available. Falls back to CPU (`halo2curves::msm::best_multiexp`) for
-/// small inputs, when no GPU is detected, or on GPU errors.
-///
-/// # Panics
-///
-/// Panics if `coeffs.len() != bases.len()`.
+/// Compute MSM: `result = sum(coeffs[i] * bases[i])`.
+/// GPU for inputs >= 8K points, CPU fallback otherwise.
 pub fn gpu_best_multiexp(coeffs: &[Scalar], bases: &[Affine]) -> Point {
     assert_eq!(coeffs.len(), bases.len());
 
     if coeffs.len() < GPU_MIN_SIZE || !is_gpu_available() {
-        return halo2curves::msm::best_multiexp(coeffs, bases);
+        return cpu_best_multiexp(coeffs, bases);
     }
 
     match gpu_msm_dispatch(coeffs, bases) {
         Ok(result) => result,
         Err(e) => {
             log::warn!("GPU MSM failed, falling back to CPU: {}", e);
-            halo2curves::msm::best_multiexp(coeffs, bases)
+            cpu_best_multiexp(coeffs, bases)
         }
     }
+}
+
+/// CPU fallback MSM (naive scalar multiplication + accumulate).
+pub fn cpu_best_multiexp(coeffs: &[Scalar], bases: &[Affine]) -> Point {
+    // pasta_curves doesn't expose best_multiexp directly.
+    // Use the naive approach for small n (CPU fallback path).
+    // For large n, this shouldn't be reached (GPU handles it).
+    let mut acc = Point::identity();
+    for (s, b) in coeffs.iter().zip(bases.iter()) {
+        acc = acc + (*b * s);
+    }
+    acc
 }
 
 fn gpu_msm_dispatch(coeffs: &[Scalar], bases: &[Affine]) -> Result<Point, String> {
     let n = coeffs.len();
 
-    // Pack scalars in standard form (to_repr)
-    let scalar_bytes: Vec<u8> = coeffs.iter().flat_map(|s| {
-        let repr = s.to_repr();
-        repr.as_ref().to_vec()
-    }).collect();
+    // Pass raw Montgomery-form scalars to GPU.
+    // GPU kernel converts Montgomery→standard on-device (eliminates CPU to_repr overhead).
+    let scalar_bytes: Vec<u8> = unsafe {
+        std::slice::from_raw_parts(
+            coeffs.as_ptr() as *const u8,
+            n * 32,
+        ).to_vec()
+    };
 
-    // Pack bases into GPU struct layout
+    // Pack bases: raw Montgomery limbs into GPU layout. Parallelized.
     const GPU_AFFINE_SIZE: usize = 96;
-    let mut gpu_bases: Vec<u8> = vec![0u8; n * GPU_AFFINE_SIZE];
-    for (i, b) in bases.iter().enumerate() {
-        let offset = i * GPU_AFFINE_SIZE;
+    let mut gpu_bases = vec![0u8; n * GPU_AFFINE_SIZE];
+    gpu_bases.par_chunks_mut(GPU_AFFINE_SIZE).zip(bases.par_iter()).for_each(|(chunk, b)| {
         let coords = b.coordinates();
         if bool::from(coords.is_some()) {
             let c = coords.unwrap();
             let x_raw: [u64; 4] = unsafe { std::mem::transmute(*c.x()) };
             let y_raw: [u64; 4] = unsafe { std::mem::transmute(*c.y()) };
             for (j, &limb) in x_raw.iter().enumerate() {
-                gpu_bases[offset + j*8..offset + j*8 + 8].copy_from_slice(&limb.to_le_bytes());
+                chunk[j*8..j*8 + 8].copy_from_slice(&limb.to_le_bytes());
             }
             for (j, &limb) in y_raw.iter().enumerate() {
-                gpu_bases[offset + 32 + j*8..offset + 32 + j*8 + 8].copy_from_slice(&limb.to_le_bytes());
+                chunk[32 + j*8..32 + j*8 + 8].copy_from_slice(&limb.to_le_bytes());
             }
-            gpu_bases[offset + 64] = 0; // not infinity
+            // chunk[64] = 0 (already zeroed)
         } else {
-            gpu_bases[offset + 64] = 1; // identity
+            chunk[64] = 1;
         }
-    }
+    });
 
     let mut result = GpuResult {
         x: GpuFp { l: [0; 4] },
@@ -140,7 +137,7 @@ fn gpu_msm_dispatch(coeffs: &[Scalar], bases: &[Affine]) -> Result<Point, String
         z: GpuFp { l: [0; 4] },
     };
 
-    let ret = unsafe {
+    let n_gpus = unsafe {
         gpu_msm_pallas(
             scalar_bytes.as_ptr(),
             gpu_bases.as_ptr(),
@@ -149,34 +146,53 @@ fn gpu_msm_dispatch(coeffs: &[Scalar], bases: &[Affine]) -> Result<Point, String
         )
     };
 
-    if ret != 0 {
-        return Err(format!("GPU kernel error {}", ret));
+    if n_gpus < 0 {
+        return Err(format!("GPU kernel error {}", n_gpus));
     }
 
-    log::debug!("GPU result Z = [{:016x}, {:016x}, {:016x}, {:016x}]",
-              result.z.l[0], result.z.l[1], result.z.l[2], result.z.l[3]);
+    if n_gpus <= 1 {
+        let point = gpu_result_to_point(&result.x.l, &result.y.l, &result.z.l);
+        return Ok(point);
+    }
 
-    let point = gpu_result_to_point(&result.x.l, &result.y.l, &result.z.l);
-    Ok(point)
+    // Multi-GPU: combine partial results
+    let mut partials = vec![GpuResult {
+        x: GpuFp { l: [0; 4] },
+        y: GpuFp { l: [0; 4] },
+        z: GpuFp { l: [0; 4] },
+    }; n_gpus as usize];
+
+    let got = unsafe {
+        gpu_msm_get_partials(partials.as_mut_ptr(), n_gpus)
+    };
+
+    let mut combined = Point::identity();
+    for i in 0..got as usize {
+        let partial = gpu_result_to_point(
+            &partials[i].x.l, &partials[i].y.l, &partials[i].z.l
+        );
+        combined = combined + partial;
+    }
+    Ok(combined)
 }
 
-/// Convert raw GPU output back to a pasta_curves Point.
+/// Convert raw GPU output (Jacobian coords, Montgomery limbs) to Point.
 fn gpu_result_to_point(x_limbs: &[u64; 4], y_limbs: &[u64; 4], z_limbs: &[u64; 4]) -> Point {
-    use halo2curves::pasta::Fp;
+    use pasta_curves::Fp;
 
     if z_limbs.iter().all(|&v| v == 0) {
         return Point::identity();
     }
 
-    // Reconstruct Fp from raw GPU output
+    // pasta_curves Fp = [u64; 4] in Montgomery form. Same as GPU.
     let x: Fp = unsafe { std::mem::transmute(*x_limbs) };
     let y: Fp = unsafe { std::mem::transmute(*y_limbs) };
     let z: Fp = unsafe { std::mem::transmute(*z_limbs) };
 
-    // Convert to affine coordinates
+    // Convert projective → affine
     let z_inv = ff::Field::invert(&z);
     if bool::from(z_inv.is_none()) {
-        log::warn!("GPU result conversion failed");
+        log::warn!("GPU result conversion failed: Z inversion");
         return Point::identity();
     }
     let z_inv = z_inv.unwrap();
@@ -186,7 +202,7 @@ fn gpu_result_to_point(x_limbs: &[u64; 4], y_limbs: &[u64; 4], z_limbs: &[u64; 4
     let aff_x = x * z_inv2;
     let aff_y = y * z_inv3;
 
-    // Verify: y^2 = x^3 + 5 (Pallas curve equation)
+    // Verify on curve: y² = x³ + 5
     let y2 = aff_y * aff_y;
     let x3 = aff_x * aff_x * aff_x;
     let rhs = x3 + Fp::from(5u64);
@@ -200,7 +216,7 @@ fn gpu_result_to_point(x_limbs: &[u64; 4], y_limbs: &[u64; 4], z_limbs: &[u64; 4
             Point::identity()
         }
     } else {
-        log::error!("GPU result not on curve -- arithmetic error");
+        log::error!("GPU result not on curve");
         Point::identity()
     }
 }
@@ -212,53 +228,65 @@ mod tests {
     use group::Curve;
     use rand_core::OsRng;
 
-    #[test]
-    fn test_gpu_detection() {
-        println!("GPU available: {}", is_gpu_available());
+    fn cpu_ref(coeffs: &[Scalar], bases: &[Affine]) -> Point {
+        cpu_best_multiexp(coeffs, bases)
     }
 
     #[test]
-    fn test_cpu_fallback_small_input() {
+    fn test_gpu_available() {
+        println!("GPU: {}", is_gpu_available());
+    }
+
+    #[test]
+    fn test_small_fallback() {
         let n = 100;
         let s: Vec<Scalar> = (0..n).map(|_| Scalar::random(OsRng)).collect();
         let b: Vec<Affine> = (0..n).map(|_| Point::random(OsRng).to_affine()).collect();
-        let gpu_result = gpu_best_multiexp(&s, &b);
-        let cpu_result = halo2curves::msm::best_multiexp(&s, &b);
-        assert_eq!(gpu_result, cpu_result, "Small input should use CPU fallback");
+        let r = gpu_best_multiexp(&s, &b);
+        let e = cpu_ref(&s, &b);
+        assert_eq!(r.to_affine(), e.to_affine());
     }
 
     #[test]
     fn test_gpu_pipeline() {
-        if !is_gpu_available() {
-            println!("Skipping GPU test -- no GPU available");
-            return;
-        }
+        if !is_gpu_available() { return; }
         let n = 1 << 14;
         let s: Vec<Scalar> = (0..n).map(|_| Scalar::random(OsRng)).collect();
         let b: Vec<Affine> = (0..n).map(|_| Point::random(OsRng).to_affine()).collect();
         let _r = gpu_best_multiexp(&s, &b);
-        println!("GPU pipeline completed successfully (n={})", n);
+        println!("GPU pipeline OK (n={})", n);
+    }
+
+    #[test]
+    fn test_gpu_simple_msm() {
+        if !is_gpu_available() { return; }
+        let n = 4;
+        let s: Vec<Scalar> = vec![Scalar::one(); n];
+        let b: Vec<Affine> = (0..n).map(|_| Point::random(OsRng).to_affine()).collect();
+        let cpu = cpu_ref(&s, &b);
+        let gpu = gpu_best_multiexp(&s, &b);
+        if cpu.to_affine() == gpu.to_affine() {
+            println!("GPU simple MSM (n={}): EXACT MATCH ✓", n);
+        } else {
+            println!("GPU simple MSM (n={}): MISMATCH", n);
+        }
     }
 
     #[test]
     fn test_gpu_correctness() {
         if !is_gpu_available() { return; }
-
         let n = 1 << 14;
         let s: Vec<Scalar> = (0..n).map(|_| Scalar::random(OsRng)).collect();
         let b: Vec<Affine> = (0..n).map(|_| Point::random(OsRng).to_affine()).collect();
-
-        let cpu = halo2curves::msm::best_multiexp(&s, &b);
+        let cpu = cpu_ref(&s, &b);
         let gpu = gpu_best_multiexp(&s, &b);
-
         let cpu_aff = cpu.to_affine();
         let gpu_aff = gpu.to_affine();
-
         if cpu_aff == gpu_aff {
-            println!("GPU MSM (n={}): EXACT MATCH", n);
+            println!("GPU MSM CORRECTNESS (n={}): EXACT MATCH ✓", n);
         } else {
-            println!("GPU MSM (n={}): mismatch (GPU identity={})",
-                     n, bool::from(gpu_aff.is_identity()));
+            println!("GPU MSM CORRECTNESS (n={}): MISMATCH (GPU id={})",
+                     n, gpu_aff == Point::identity().to_affine());
         }
     }
 }

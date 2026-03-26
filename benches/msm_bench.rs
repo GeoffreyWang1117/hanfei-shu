@@ -1,8 +1,9 @@
+use group::Curve;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::Field;
-use group::{Curve, Group};
-use halo2curves::pasta::pallas;
-use pallas_gpu_msm::gpu_best_multiexp;
+use group::{Group};
+use pasta_curves::pallas;
+use hanfei_shu::gpu_best_multiexp;
 use rand_core::OsRng;
 
 fn bench_msm(c: &mut Criterion) {
@@ -20,7 +21,7 @@ fn bench_msm(c: &mut Criterion) {
         });
 
         group.bench_with_input(BenchmarkId::new("cpu_only", k), &k, |b, _| {
-            b.iter(|| halo2curves::msm::best_multiexp(&scalars, &bases));
+            b.iter(|| hanfei_shu::cpu_best_multiexp(&scalars, &bases));
         });
     }
 

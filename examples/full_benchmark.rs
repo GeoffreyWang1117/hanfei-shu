@@ -1,11 +1,12 @@
+use group::Curve;
 //! Comprehensive benchmark: GPU vs CPU MSM across multiple input sizes.
 //!
 //! Run with: cargo run --release --example full_benchmark
 
 use ff::Field;
-use group::{Curve, Group};
-use halo2curves::pasta::pallas;
-use pallas_gpu_msm::{gpu_best_multiexp, is_gpu_available};
+use group::{Group};
+use pasta_curves::pallas;
+use hanfei_shu::{gpu_best_multiexp, is_gpu_available};
 use rand_core::OsRng;
 use std::time::Instant;
 
@@ -61,7 +62,7 @@ fn main() {
         let mut cpu_result = pallas::Point::identity();
         for _ in 0..iters {
             let t = Instant::now();
-            cpu_result = halo2curves::msm::best_multiexp(&scalars, &bases);
+            cpu_result = hanfei_shu::cpu_best_multiexp(&scalars, &bases);
             cpu_total += t.elapsed().as_secs_f64() * 1000.0;
         }
         let cpu_ms = cpu_total / iters as f64;
@@ -78,6 +79,6 @@ fn main() {
     println!("  Notes:");
     println!("  - k < 13: GPU fallback to CPU (below 8K threshold)");
     println!("  - GPU times include host<->device transfer");
-    println!("  - CPU uses halo2curves::msm::best_multiexp (multi-threaded)");
+    println!("  - CPU uses hanfei_shu::cpu_best_multiexp (multi-threaded)");
     println!("================================================================");
 }

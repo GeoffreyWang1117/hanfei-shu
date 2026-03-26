@@ -1,23 +1,36 @@
 [package]
-name = "pallas-gpu-msm"
-version = "0.1.0"
+name = "hanfei-shu"
+version = "0.2.0"
 edition = "2021"
-description = "The first GPU-accelerated Multi-Scalar Multiplication (MSM) for the Pallas elliptic curve"
+description = "术 — GPU-accelerated Multi-Scalar Multiplication for the Pallas elliptic curve. The first and only GPU MSM for the Halo2/Pasta ecosystem."
 license = "Apache-2.0"
-repository = "https://github.com/GeoffreyWang1117/HanFei"
+repository = "https://github.com/GeoffreyWang1117/hanfei-shu"
+homepage = "https://geoffreywang1117.github.io/hanfei-shu/"
+documentation = "https://docs.rs/hanfei-shu"
 keywords = ["pallas", "msm", "gpu", "cuda", "zero-knowledge"]
 categories = ["cryptography", "mathematics"]
 readme = "README.md"
+include = [
+    "src/**",
+    "prebuilt/**",
+    "build.rs",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "examples/**",
+    "benches/**",
+]
 
 [dependencies]
-halo2curves = "0.6"
 ff = "0.13"
 group = "0.13"
 pasta_curves = "0.5"
 log = "0.4"
+rayon = "1.10"
 
 [dev-dependencies]
-rand_core = "0.6"
+rand_core = { version = "0.6", features = ["getrandom"] }
+rand = "0.8"
 env_logger = "0.11"
 criterion = { version = "0.5", features = ["html_reports"] }
 serde_json = "1.0"
@@ -39,3 +52,6 @@ name = "basic_msm"
 
 [[example]]
 name = "full_benchmark"
+
+[[example]]
+name = "official_benchmark"
